@@ -132,9 +132,9 @@ class Target:
         # Get the complete list of source files that this target depends on.
         sources: set[str] = set(runner.run(["cquery", query]))
 
-        # Keep entries that match all of the filters.
+        # Keep entries that match any of the filters.
         filters = [re.compile(p) for p in self._config.get("filters", [])]
-        sources = {s for s in sources if all(p.search(s) for p in filters)}
+        sources = {s for s in sources if any(p.search(s) for p in filters)}
 
         # Remove entries that match any of the excludes.
         excludes = [re.compile(p) for p in self._config.get("excludes", [])]
