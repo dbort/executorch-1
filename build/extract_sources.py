@@ -210,13 +210,12 @@ def generate_json(target_to_srcs: dict[str, list[str]]) -> bytes:
     return json.dumps(target_to_srcs, indent=4).encode("utf-8")
 
 
-def query_targets_to_srcs(config_toml: str, buck2: str = "buck2") -> dict[str, list[str]]:
+def query_targets_to_srcs(config_toml: str, runner: Buck2Runner) -> dict[str, list[str]]:
     """Builds a map from target names to lists of source files."""
     config_dict = tomllib.loads(config_toml)
     graph = Graph(config_dict)
 
     target_to_srcs: dict[str, list[str]] = {}
-    runner: Buck2Runner = Buck2Runner(buck2)
     for name, target in graph.by_name.items():
         target_to_srcs[name] = sorted(target.get_sources(graph, runner))
 
@@ -231,7 +230,8 @@ def main():
         config_toml = fp.read()
 
     # Run the queries and get the lists of source files.
-    target_to_srcs = query_targets_to_srcs(config_toml, args.buck2)
+    runner: Buck2Runner = Buck2Runner(buck2)
+    target_to_srcs = query_targets_to_srcs(config_toml, runner)
 
     # Generate the requested format.
     output: bytes

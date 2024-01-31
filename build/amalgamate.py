@@ -6,11 +6,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import logging
 import os
 import re
-import subprocess
+import sys
 
-from extract_sources import query_targets_to_srcs
+from extract_sources import query_targets_to_srcs, Buck2Runner
 
 # extract_sources config to get the source files to combine.
 CONFIG_TOML = """
@@ -19,29 +20,29 @@ CONFIG_TOML = """
 # flatbuffers headers.
 [targets.program_schema]
 buck_targets = [
-  "//schema:program",
+    "//schema:program",
 ]
 filters = [
-  ".fbs$",
-  "/flatbuffers/flatbuffers.h$",
-  "/flatbuffers/base.h$",
+    ".fbs$",
+    "/flatbuffers/flatbuffers.h$",
+    "/flatbuffers/base.h$",
 ]
 
 # List the .cpp and .h files used to build the core runtime. Does not include
 # the generated schema headers nor the core flatbuffers headers.
 [targets.executorch]
 buck_targets = [
-  "//runtime/executor:program",
+    "//runtime/executor:program",
 ]
 deps = [
-  "program_schema",
+    "program_schema",
 ]
 filters = [
-  ".cpp$",
-  ".h$",
+    ".cpp$",
+    ".h$",
 ]
 excludes = [
-  "^third-party",
+    "^third-party",
 ]
 """
 
@@ -70,12 +71,81 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def build_fbs_headers(fbs_sources: list[str], runner: Buck2Runner) -> dict[str, str]:
+    """Builds flatbuffer-based headers and returns an include-to-file mapping.
+
+    Args:
+        fbs_srcs: List of source files to build or translate. Should contain
+            only .fbs files or header files under a flatbuffers/include/...
+            directory.
+        runner: The Buck2Runner to use to run commands.
+
+    Returns:
+        A dictionary mapping include paths to actual file locations, either
+        absolute or relative to the root of the tree.
+    """
+    include_to_header: dict[str, str] = {}
+    for src in fbs_sources:
+        if "/include/flatbuffers/" in src:
+            # Add a mapping for the flatbuffer file, which will be included like
+            # "flatbuffers/flatbuffers.h".
+            include_to_header[re.sub(r'.*/include/', '', src)] = src
+            continue
+
+        assert(src.endswith(".fbs")), f"Unexpected file name: {src}"
+
+        # Get the file stem: e.g., "schema/program.fbs" -> "program"
+        stem, _ = os.path.splitext(os.path.basename(src))
+
+        # Get the name of the header file.
+        header = f"{stem}_generated.h"
+
+        # Build it and get its location.
+        stdout = runner.run([
+            "build",
+            # It's a little fragile to hard-code this internal target,
+            # but since these headers aren't part of the public API we
+            # need to do something like this.
+            f"//schema:generate_program[{header}]",
+            "--show-full-output",
+        ])
+        assert len(stdout) == 1, f"Expected one line of output, got:\n{repr(stdout)}"
+        # The line should have two fields separated by a space. The
+        # second is the absolute path to the built header.
+        _, abs_header = stdout[0].split(" ", maxsplit=1)
+
+        # Mapping from the include path to the built path.
+        include_to_header[f"executorch/schema/{header}"] = abs_header
+
+    return include_to_header
+
+
 def main():
     args = parse_args()
+    runner: Buck2Runner = Buck2Runner(args.buck2)
 
-    target_to_srcs = query_targets_to_srcs(CONFIG_TOML, args.buck2)
-    print(target_to_srcs)
+    # Get the list of source files.
+    logging.info("Querying source list from buck2...")
+    target_to_srcs = query_targets_to_srcs(CONFIG_TOML, runner)
+
+    # For .fbs files, build the generated headers and get a mapping from the
+    # include path (e.g., "executorch/schema/program.h") to the built header
+    # path (somewhere under buck-out). Intentionally die with KeyError if this
+    # key isn't present.
+    logging.info("Building flatbuffer headers...")
+    include_to_file = build_fbs_headers(target_to_srcs["program_schema"], runner)
+
+    # Finish out the include mapping by adding entries prefixed with
+    # "executorch/" to match the expected include paths. Intentinally die with
+    # KeyError if this key isn't present.
+    for src in target_to_srcs["executorch"]:
+        if src.endswith(".h"):
+            include_to_file[f"executorch/{src}"] = src
+
+    for k, v in include_to_file.items():
+        print(f"{k}: {v}")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
     main()
