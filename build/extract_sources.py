@@ -81,7 +81,7 @@ class Buck2Runner:
             )
             return [line.strip().decode("utf-8") for line in cp.stdout.splitlines()]
         except subprocess.CalledProcessError as ex:
-            raise RuntimeError(ex.stderr.decode("utf-8")) from ex
+            raise RuntimeError("Failed while running '" + self._path + " " + " ".join(args) + "': " + ex.stderr.decode("utf-8")) from ex
 
 
 class Target:
@@ -182,7 +182,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--format",
         default="cmake",
-        choices=["cmake"],
+        choices=["cmake", "json"],
         help="Format to generate.",
     )
     parser.add_argument(
@@ -205,6 +205,11 @@ def generate_cmake(target_to_srcs: dict[str, list[str]]) -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
+def generate_json(target_to_srcs: dict[str, list[str]]) -> bytes:
+    import json
+    return json.dumps(target_to_srcs, indent=4).encode("utf-8")
+
+
 def main():
     args = parse_args()
 
@@ -223,6 +228,8 @@ def main():
     output: bytes
     if args.format == "cmake":
         output = generate_cmake(target_to_srcs)
+    elif args.format == "json":
+        output = generate_json(target_to_srcs)
     else:
         raise ValueError("Unknown format: {}".format(args.format))
 
