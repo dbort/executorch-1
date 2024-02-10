@@ -144,6 +144,7 @@ def main():
 
     for k, v in include_to_file.items():
         print(f"{k}: {v}")
+    logging.info(f"Root {runner.root}")
 
 
 if __name__ == "__main__":

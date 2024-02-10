@@ -13,6 +13,7 @@ import subprocess
 
 from enum import Enum
 from typing import Any, Optional, Sequence
+from pathlib import Path
 
 try:
     import tomllib  # Standard in 3.11 and later
@@ -71,6 +72,7 @@ BUCK_CWD: str = os.path.dirname(os.path.realpath(__file__))
 
 class Buck2Runner:
     def __init__(self, tool_path: str) -> None:
+        self._root: Optional[Path] = None
         self._path = tool_path
 
     def run(self, args: Sequence[str]) -> list[str]:
@@ -82,6 +84,14 @@ class Buck2Runner:
             return [line.strip().decode("utf-8") for line in cp.stdout.splitlines()]
         except subprocess.CalledProcessError as ex:
             raise RuntimeError("Failed while running '" + self._path + " " + " ".join(args) + "': " + ex.stderr.decode("utf-8")) from ex
+    
+    @property
+    def root(self):
+        if self._root is None:
+            lines = self.run(["root", "--kind", "project"])
+            assert(len(lines) == 1), f"Unexpected lines {repr(lines)}"
+            self._root = Path(lines[0])
+        return self._root
 
 
 class Target:
@@ -230,7 +240,7 @@ def main():
         config_toml = fp.read()
 
     # Run the queries and get the lists of source files.
-    runner: Buck2Runner = Buck2Runner(buck2)
+    runner: Buck2Runner = Buck2Runner(args.buck2)
     target_to_srcs = query_targets_to_srcs(config_toml, runner)
 
     # Generate the requested format.
