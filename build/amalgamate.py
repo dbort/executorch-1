@@ -31,8 +31,6 @@ for .h:
 will need to remove the "pragma once" lines
 """
 
-COLUMNS: int = 80
-
 class SourcePath:
     def __init__(self, root: Path, src: str):
         if not os.path.isabs(src):
@@ -44,16 +42,6 @@ class SourcePath:
         self.abs = os.path.abspath(src)
         # Will contain ".." components if it doesn't live under root.
         self.rel = os.path.relpath(self.abs, root)
-
-
-def section_comment(outfp: TextIO, text: str) -> None:
-    global COLUMNS
-    line = "/************** " + text + " "
-    remainder = COLUMNS - len(line) - 2
-    if remainder > 0:
-        line += "*" * remainder
-    line += "*/\n"
-    outfp.write(line)
 
 
 class _SourceWriter:
@@ -68,9 +56,45 @@ class _SourceWriter:
         # Set of include paths that have already been expanded.
         self._seen_includes: set[str] = set()
 
-    def write(self, src: SourcePath) -> None:
+    def _section_comment(self, text: str) -> None:
+        columns = 80
+        line = "/************** " + text + " "
+        remainder = columns - len(line) - 2
+        if remainder > 0:
+            line += "*" * remainder
+        line += "*/\n"
+        self._outfp.write(line)
+
+    def _write_line(self, src: SourcePath, line: str, lineno: int):
+        match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
+        if match:
+            include = match.group(2) or match.group(3)
+            if include in self._includes_to_paths:
+                header = self._includes_to_paths[include]
+                if header.abs in self._seen_includes:
+                    # Comment out the entire line, watching out for
+                    # existing block comment start/end sequences. Note
+                    # that this doesn't handle the case where a block
+                    # comment begins/ends on this line but ends/begins
+                    # on a different line.
+                    escaped_line = line.replace("/*", "**").replace("*/", "**")
+                    self._outfp.write(f"/* {escaped_line} */\n")
+                else:
+                    # Use the absolute path as an unambiguous way to
+                    # refer to a specific file, since it could be
+                    # included using different relative paths.
+                    self._seen_includes.add(header.abs)
+                    self._section_comment(f"Include {header.rel} in the middle of {src.rel}")
+                    self.write_file(header)
+                    self._section_comment(f"Continuing where we left off in {src.rel}")
+                    if self._line_macros:
+                        self._outfp.write(f"#line {lineno+1} \"{src.rel}\"\n")
+            else:
+                self._outfp.write(f">>> unhandled include {include}\n")
+
+    def write_file(self, src: SourcePath) -> None:
         # TODO: Print a less awkward path for generated headers
-        section_comment(self._outfp, f"Begin file {src.rel}")
+        self._section_comment(f"Begin file {src.rel}")
         if self._line_macros:
             self._outfp.write(f"#line 1 \"{src.rel}\"\n")
 
@@ -78,34 +102,9 @@ class _SourceWriter:
             lineno: int = 0
             for line in infp:
                 lineno += 1
-                line = line.rstrip("\r\n")
-                match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
-                if match:
-                    include = match.group(2) or match.group(3)
-                    if include in self._includes_to_paths:
-                        header = self._includes_to_paths[include]
-                        if header.abs in self._seen_includes:
-                            # Comment out the entire line, watching out for
-                            # existing block comment start/end sequences. Note
-                            # that this doesn't handle the case where a block
-                            # comment begins/ends on this line but ends/begins
-                            # on a different line.
-                            escaped_line = line.replace("/*", "**").replace("*/", "**")
-                            self._outfp.write(f"/* {escaped_line} */\n")
-                        else:
-                            # Use the absolute path as an unambiguous way to
-                            # refer to a specific file, since it could be
-                            # included using different relative paths.
-                            self._seen_includes.add(header.abs)
-                            section_comment(self._outfp, f"Include {header.rel} in the middle of {src.rel}")
-                            self.write(header)
-                            section_comment(self._outfp, f"Continuing where we left off in {src.rel}")
-                            if self._line_macros:
-                                self._outfp.write(f"#line {lineno+1} \"{src.rel}\"\n")
-                    else:
-                        self._outfp.write(f">>> unhandled include {include}\n")
+                self._write_line(src=src, line=line.rstrip("\r\n"), lineno=lineno)
 
-        section_comment(self._outfp, f"End of {src.rel}")
+        self._section_comment(f"End of {src.rel}")
 
 
 def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_paths: dict[str, str], line_macros: bool = False) -> None:
@@ -113,7 +112,7 @@ def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_p
     # `#include` only the first time it's seen.
     writer = _SourceWriter(outfp=outfp, root=root, includes_to_paths=includes_to_paths, line_macros=line_macros)
     for src in srcs:
-        writer.write(SourcePath(root=root, src=src))
+        writer.write_file(SourcePath(root=root, src=src))
 
 
 def parse_args() -> argparse.Namespace:
