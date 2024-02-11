@@ -75,41 +75,32 @@ class _SourceWriter:
         escaped_line = line.replace("/*", "|*").replace("*/", "*|")
         self._outfp.write(f"/* {escaped_line} */\n")
 
-    def _write_line(self, src: SourcePath, line: str, lineno: int):
-        match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
-        if match:
-            # This is a `#include` line.
-            include = match.group(2) or match.group(3)
-            if include in self._includes_to_paths:
-                header = self._includes_to_paths[include]
-                if header.abs in self._seen_includes:
-                    self._comment_line(line)
-                else:
-                    # Use the absolute path as an unambiguous way to refer to a
-                    # specific file, since it could be included using different
-                    # relative paths.
-                    self._seen_includes.add(header.abs)
-                    self._section_comment(f"Include {header.rel} in the middle of {src.rel}")
-                    self.write_file(header)
-                    self._section_comment(f"Continuing where we left off in {src.rel}")
-                    if self._line_macros:
-                        self._outfp.write(f"#line {lineno+1} \"{src.rel}\"\n")
+    def _write_include_line(self, src: SourcePath, line: str, lineno: int, include: str):
+        if include in self._includes_to_paths:
+            header = self._includes_to_paths[include]
+            if header.abs in self._seen_includes:
+                self._comment_line(line)
             else:
-                # Probably a system header. We want to print the `#include`
-                # the first time we see it, then skip all future instances.
-                # Use a special prefix to make it less likely to alias to
-                # real includes.
-                include_key = f"$//{include}"
-                if include_key in self._seen_includes:
-                    self._comment_line(line)
-                else:
-                    self._seen_includes.add(include_key)
-                    self._outfp.write(line + "\n")
+                # Use the absolute path as an unambiguous way to refer to a
+                # specific file, since it could be included using different
+                # relative paths.
+                self._seen_includes.add(header.abs)
+                self._section_comment(f"Include {header.rel} in the middle of {src.rel}")
+                self.write_file(header)
+                self._section_comment(f"Continuing where we left off in {src.rel}")
+                if self._line_macros:
+                    self._outfp.write(f"#line {lineno+1} \"{src.rel}\"\n")
         else:
-            # TODO: Remove #pragma once if this is a .cpp file
-
-            # This is not a `#include` line.
-            self._outfp.write(line + "\n")
+            # Probably a system header. We want to print the `#include`
+            # the first time we see it, then skip all future instances.
+            # Use a special prefix to make it less likely to alias to
+            # real includes.
+            include_key = f"$//{include}"
+            if include_key in self._seen_includes:
+                self._comment_line(line)
+            else:
+                self._seen_includes.add(include_key)
+                self._outfp.write(line + "\n")
 
     def write_file(self, src: SourcePath) -> None:
         # TODO: Print a less awkward path for generated headers
@@ -120,8 +111,22 @@ class _SourceWriter:
         with open(src.abs, "r") as infp:
             lineno: int = 0
             for line in infp:
+                line = line.rstrip("\r\n")
                 lineno += 1
-                self._write_line(src=src, line=line.rstrip("\r\n"), lineno=lineno)
+                include_match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
+                if include_match:
+                    # This is a `#include` line.
+                    include = include_match.group(2) or include_match.group(3)
+                    self._write_include_line(src=src, line=line, lineno=lineno, include=include)
+                    continue
+
+                if re.match(r'^\s*#\s*pragma\s+once\b', line):
+                    # This is a `#pragma once` line.
+                    self._comment_line(line)
+                    continue
+
+                # Not a special line. Write it to the output unchanged.
+                self._outfp.write(line + "\n")
 
         self._section_comment(f"End of {src.rel}")
 
