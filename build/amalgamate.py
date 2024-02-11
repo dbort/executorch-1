@@ -71,7 +71,7 @@ class _SourceWriter:
     def write(self, src: SourcePath) -> None:
         section_comment(self._outfp, f"Begin file {src.rel}")
         if self._line_macros:
-            self._outfp.write("#line 1 " + src.rel + "\n")
+            self._outfp.write(f"#line 1 \"{src.rel}\"\n")
 
         with open(src.abs, "r") as infp:
             for line in infp:
@@ -80,12 +80,18 @@ class _SourceWriter:
                 if match:
                     include = match.group(2) or match.group(3)
                     if include in self._includes_to_paths:
-                        header_path = self._includes_to_paths[include].abs
-                        if header_path in self._seen_includes:
+                        header = self._includes_to_paths[include]
+                        if header.abs in self._seen_includes:
                             self._outfp.write(f">>> skipping seen include {include}\n")
                         else:
-                            self._outfp.write(f">>> new include {include} -> {header_path}\n")
-                            self._seen_includes.add(header_path)
+                            # Use the absolute path as an unambiguous way to
+                            # refer to a specific file.
+                            self._seen_includes.add(header.abs)
+                            section_comment(self._outfp, f"Include {header.rel} in the middle of {src.rel}")
+                            self.write(header)
+                            section_comment(self._outfp, f"Continuing where we left off in {src.rel}")
+                            if self._line_macros:
+                                self._outfp.write(f"#line TODO $ln+1 \"{src.rel}\"\n")
                     else:
                         self._outfp.write(f">>> unhandled include {include}\n")
 
