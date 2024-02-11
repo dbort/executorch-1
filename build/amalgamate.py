@@ -8,6 +8,7 @@
 import argparse
 import logging
 import os
+import re
 import sys
 
 from pathlib import Path
@@ -55,7 +56,7 @@ def section_comment(outfp: TextIO, text: str) -> None:
     outfp.write(line)
 
 
-def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_paths: dict[str, str], header: Optional[str]) -> None:
+def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_paths: dict[str, str], header: Optional[str] = None, line_macros: bool = False) -> None:
     """Combines the sources, writing the output to an open file.
 
     Args:
@@ -65,6 +66,8 @@ def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_p
         includes_to_paths: A mapping of #include paths to the filesystem paths
             that should be loaded in their places.
         header: Optional multi-line string to add to the top of the file.
+        line_macros: If true, emit C-preprocessor `#line` macros to tie lines of
+            the amalgamated file back to the original files.
     """
     if header:
         outfp.write(header)
@@ -74,6 +77,21 @@ def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_p
     for src in srcs:
         source_path = SourcePath(root=root, src=src)
         section_comment(outfp, f"Begin file {source_path.rel}")
+        if line_macros:
+            outfp.write("#line 1 " + source_path.rel + "\n")
+
+        with open(source_path.abs, "r") as infp:
+            for line in infp:
+                line = line.rstrip("\r\n")
+                match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
+                if match:
+                    include = match.group(2) or match.group(3)
+                    if include in includes_to_paths:
+                        header_path = SourcePath(root, includes_to_paths[include]).abs
+                        outfp.write(f">>> found include {include} -> {header_path}\n")
+                    else:
+                        outfp.write(f">>> unhandled include {include}\n")
+
         section_comment(outfp, f"End of {source_path.rel}")
 
 
