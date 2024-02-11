@@ -59,30 +59,35 @@ class _SourceWriter:
     def _section_comment(self, text: str) -> None:
         columns = 80
         line = "/************** " + text + " "
-        remainder = columns - len(line) - 2
+        remainder = columns - len(line) - len("*/")
         if remainder > 0:
             line += "*" * remainder
         line += "*/\n"
         self._outfp.write(line)
 
+    def _comment_line(self, line: str) -> None:
+        """Wraps the line in a comment and writes it.
+
+        Handles simple cases of block comment markers "/*" and "*/" appearing on
+        the line, but does not handle the case where a block comment begins/ends
+        on this line and ends/begins on a different line.
+        """
+        escaped_line = line.replace("/*", "|*").replace("*/", "*|")
+        self._outfp.write(f"/* {escaped_line} */\n")
+
     def _write_line(self, src: SourcePath, line: str, lineno: int):
         match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
         if match:
+            # This is a `#include` line.
             include = match.group(2) or match.group(3)
             if include in self._includes_to_paths:
                 header = self._includes_to_paths[include]
                 if header.abs in self._seen_includes:
-                    # Comment out the entire line, watching out for
-                    # existing block comment start/end sequences. Note
-                    # that this doesn't handle the case where a block
-                    # comment begins/ends on this line but ends/begins
-                    # on a different line.
-                    escaped_line = line.replace("/*", "**").replace("*/", "**")
-                    self._outfp.write(f"/* {escaped_line} */\n")
+                    self._comment_line(line)
                 else:
-                    # Use the absolute path as an unambiguous way to
-                    # refer to a specific file, since it could be
-                    # included using different relative paths.
+                    # Use the absolute path as an unambiguous way to refer to a
+                    # specific file, since it could be included using different
+                    # relative paths.
                     self._seen_includes.add(header.abs)
                     self._section_comment(f"Include {header.rel} in the middle of {src.rel}")
                     self.write_file(header)
@@ -90,7 +95,21 @@ class _SourceWriter:
                     if self._line_macros:
                         self._outfp.write(f"#line {lineno+1} \"{src.rel}\"\n")
             else:
-                self._outfp.write(f">>> unhandled include {include}\n")
+                # Probably a system header. We want to print the `#include`
+                # the first time we see it, then skip all future instances.
+                # Use a special prefix to make it less likely to alias to
+                # real includes.
+                include_key = f"$//{include}"
+                if include_key in self._seen_includes:
+                    self._comment_line(line)
+                else:
+                    self._seen_includes.add(include_key)
+                    self._outfp.write(line + "\n")
+        else:
+            # TODO: Remove #pragma once if this is a .cpp file
+
+            # This is not a `#include` line.
+            self._outfp.write(line + "\n")
 
     def write_file(self, src: SourcePath) -> None:
         # TODO: Print a less awkward path for generated headers
