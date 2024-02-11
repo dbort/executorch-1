@@ -11,6 +11,7 @@ import os
 import re
 import sys
 
+from amalgamate import amalgamate_sources
 from extract_sources import query_targets_to_srcs, Buck2Runner
 
 # extract_sources config to get the source files to combine.
@@ -49,7 +50,7 @@ excludes = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Combines .cpp and .h files into a smaller number of files",
+        description="Combines ExecuTorch sources into a smaller number of .cpp and .h files",
     )
     parser.add_argument(
         "--buck2",
@@ -141,10 +142,15 @@ def main():
     for src in target_to_srcs["executorch"]:
         if src.endswith(".h"):
             include_to_file[f"executorch/{src}"] = src
-
+    
     for k, v in include_to_file.items():
         print(f"{k}: {v}")
     logging.info(f"Root {runner.root}")
+
+    # Generate executorch.cpp.
+    cpp_srcs = [src for src in target_to_srcs["executorch"] if src.endswith(".cpp")]
+    with open(os.path.join(args.outdir, "executorch.cpp"), "w") as fp:
+        amalgamate_sources(fp, root=runner.root, srcs=cpp_srcs, includes_to_paths=include_to_file, header = "/* HEADER */")
 
 
 if __name__ == "__main__":
