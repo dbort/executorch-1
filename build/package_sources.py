@@ -151,7 +151,7 @@ def main():
     cpp_srcs = [src for src in target_to_srcs["executorch"] if src.endswith(".cpp")]
     with open(os.path.join(args.outdir, "executorch.cpp"), "w") as fp:
         fp.write("/* HEADER */\n")
-        amalgamate_sources(fp, root=runner.root, srcs=cpp_srcs, includes_to_paths=include_to_file)
+        amalgamate_sources(fp, root=runner.root, srcs=cpp_srcs, includes_to_paths=include_to_file, line_macros=True)
         fp.write("/* FOOTER */\n")
 
 

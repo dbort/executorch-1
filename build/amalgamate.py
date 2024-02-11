@@ -69,12 +69,15 @@ class _SourceWriter:
         self._seen_includes: set[str] = set()
 
     def write(self, src: SourcePath) -> None:
+        # TODO: Print a less awkward path for generated headers
         section_comment(self._outfp, f"Begin file {src.rel}")
         if self._line_macros:
             self._outfp.write(f"#line 1 \"{src.rel}\"\n")
 
         with open(src.abs, "r") as infp:
+            lineno: int = 0
             for line in infp:
+                lineno += 1
                 line = line.rstrip("\r\n")
                 match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
                 if match:
@@ -82,16 +85,23 @@ class _SourceWriter:
                     if include in self._includes_to_paths:
                         header = self._includes_to_paths[include]
                         if header.abs in self._seen_includes:
-                            self._outfp.write(f">>> skipping seen include {include}\n")
+                            # Comment out the entire line, watching out for
+                            # existing block comment start/end sequences. Note
+                            # that this doesn't handle the case where a block
+                            # comment begins/ends on this line but ends/begins
+                            # on a different line.
+                            escaped_line = line.replace("/*", "**").replace("*/", "**")
+                            self._outfp.write(f"/* {escaped_line} */\n")
                         else:
                             # Use the absolute path as an unambiguous way to
-                            # refer to a specific file.
+                            # refer to a specific file, since it could be
+                            # included using different relative paths.
                             self._seen_includes.add(header.abs)
                             section_comment(self._outfp, f"Include {header.rel} in the middle of {src.rel}")
                             self.write(header)
                             section_comment(self._outfp, f"Continuing where we left off in {src.rel}")
                             if self._line_macros:
-                                self._outfp.write(f"#line TODO $ln+1 \"{src.rel}\"\n")
+                                self._outfp.write(f"#line {lineno+1} \"{src.rel}\"\n")
                     else:
                         self._outfp.write(f">>> unhandled include {include}\n")
 
