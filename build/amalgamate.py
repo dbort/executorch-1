@@ -56,43 +56,48 @@ def section_comment(outfp: TextIO, text: str) -> None:
     outfp.write(line)
 
 
-def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_paths: dict[str, str], header: Optional[str] = None, line_macros: bool = False) -> None:
-    """Combines the sources, writing the output to an open file.
+class _SourceWriter:
+    def __init__(self, outfp: TextIO, root: Path, includes_to_paths: dict[str, str], line_macros: bool = False):
+        # Immutable attributes.
+        self._outfp = outfp
+        # Convert keys to SourcePath entries to simplify the main loop.
+        self._includes_to_paths = {k: SourcePath(root, v) for k, v in includes_to_paths.items()}
+        self._line_macros = line_macros
 
-    Args:
-        outfp: The file object to write to.
-        root: Prefix to use for relative paths.
-        srcs: The list of paths of the source files to combine, in order.
-        includes_to_paths: A mapping of #include paths to the filesystem paths
-            that should be loaded in their places.
-        header: Optional multi-line string to add to the top of the file.
-        line_macros: If true, emit C-preprocessor `#line` macros to tie lines of
-            the amalgamated file back to the original files.
-    """
-    if header:
-        outfp.write(header)
-        outfp.write("\n")
+        # Mutable attributes.
+        # Set of include paths that have already been expanded.
+        self._seen_includes: set[str] = set()
 
-    seen_includes: set[str] = set()
-    for src in srcs:
-        source_path = SourcePath(root=root, src=src)
-        section_comment(outfp, f"Begin file {source_path.rel}")
-        if line_macros:
-            outfp.write("#line 1 " + source_path.rel + "\n")
+    def write(self, src: SourcePath) -> None:
+        section_comment(self._outfp, f"Begin file {src.rel}")
+        if self._line_macros:
+            self._outfp.write("#line 1 " + src.rel + "\n")
 
-        with open(source_path.abs, "r") as infp:
+        with open(src.abs, "r") as infp:
             for line in infp:
                 line = line.rstrip("\r\n")
                 match = re.match(r'^\s*#\s*include\s*(<([^>]*)>|"([^"]*)")', line)
                 if match:
                     include = match.group(2) or match.group(3)
-                    if include in includes_to_paths:
-                        header_path = SourcePath(root, includes_to_paths[include]).abs
-                        outfp.write(f">>> found include {include} -> {header_path}\n")
+                    if include in self._includes_to_paths:
+                        header_path = self._includes_to_paths[include].abs
+                        if header_path in self._seen_includes:
+                            self._outfp.write(f">>> skipping seen include {include}\n")
+                        else:
+                            self._outfp.write(f">>> new include {include} -> {header_path}\n")
+                            self._seen_includes.add(header_path)
                     else:
-                        outfp.write(f">>> unhandled include {include}\n")
+                        self._outfp.write(f">>> unhandled include {include}\n")
 
-        section_comment(outfp, f"End of {source_path.rel}")
+        section_comment(self._outfp, f"End of {src.rel}")
+
+
+def amalgamate_sources(outfp: TextIO, root: Path, srcs: list[str], includes_to_paths: dict[str, str], line_macros: bool = False) -> None:
+    # Write the contents of each source file into the output, expanding each
+    # `#include` only the first time it's seen.
+    writer = _SourceWriter(outfp=outfp, root=root, includes_to_paths=includes_to_paths, line_macros=line_macros)
+    for src in srcs:
+        writer.write(SourcePath(root=root, src=src))
 
 
 def parse_args() -> argparse.Namespace:
