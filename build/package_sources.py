@@ -25,8 +25,7 @@ buck_targets = [
 ]
 filters = [
     ".fbs$",
-    "/flatbuffers/flatbuffers.h$",
-    "/flatbuffers/base.h$",
+    "/include/flatbuffers/.*[.]h$",
 ]
 
 # List the .cpp and .h files used to build the core runtime. Does not include
@@ -115,8 +114,11 @@ def build_fbs_headers(fbs_sources: list[str], runner: Buck2Runner) -> dict[str, 
         # second is the absolute path to the built header.
         _, abs_header = stdout[0].split(" ", maxsplit=1)
 
-        # Mapping from the include path to the built path.
+        # Mappings from the include path to the built path.
         include_to_header[f"executorch/schema/{header}"] = abs_header
+        # Generated headers can include other generated headers without a path
+        # prefix.
+        include_to_header[f"{header}"] = abs_header
 
     return include_to_header
 
@@ -142,7 +144,7 @@ def main():
     for src in target_to_srcs["executorch"]:
         if src.endswith(".h"):
             include_to_file[f"executorch/{src}"] = src
-    
+
     for k, v in include_to_file.items():
         print(f"{k}: {v}")
     logging.info(f"Root {runner.root}")
@@ -150,9 +152,9 @@ def main():
     # Generate executorch.cpp.
     cpp_srcs = [src for src in target_to_srcs["executorch"] if src.endswith(".cpp")]
     with open(os.path.join(args.outdir, "executorch.cpp"), "w") as fp:
-        fp.write("/* HEADER */\n")
+        fp.write("/* @" + "generated */\n")
+        fp.write("/* Try building with: " + "clang++ --std=c++17 -c executorch.cpp -o executorch.o */\n")
         amalgamate_sources(fp, root=runner.root, srcs=cpp_srcs, includes_to_paths=include_to_file, line_macros=True)
-        fp.write("/* FOOTER */\n")
 
 
 if __name__ == "__main__":
