@@ -63,6 +63,6 @@ find_library(TORCH_PYTHON_LIBRARY torch_python
 unset(CMAKE_CXX_FLAGS_RELEASE)
 
 list(TRANSFORM _extension_aot_util__srcs PREPEND "${EXECUTORCH_ROOT}/")
-add_library(aot_util ${_extension_aot_util__srcs})
+add_library(aot_util SHARED ${_extension_aot_util__srcs})
 target_include_directories(aot_util PUBLIC ${TORCH_INCLUDE_DIRS})
 target_link_libraries(aot_util torch)
