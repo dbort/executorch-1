@@ -42,9 +42,16 @@ set(_common_compile_options -Wno-deprecated-declarations -fPIC)
 # Let files say "include <executorch/path/to/header.h>".
 set(_common_include_directories ${EXECUTORCH_ROOT}/..)
 
-find_package(executorch CONFIG REQUIRED)
-find_package(gflags REQUIRED PATHS
-             ${CMAKE_CURRENT_BINARY_DIR}/../../../third-party)
+# The path to executorch/cmake-out. We assume that the top-level project has
+# already been built, and then installed directly under the same cmake-out.
+set(_root_binary_dir "${EXECUTORCH_ROOT}/cmake-out")
+if(NOT EXISTS "${_root_binary_dir}")
+  message(FATAL_ERROR "Root binary dir '${_root_binary_dir}' does not exist. "
+          "Please build and install the top-level project first.")
+endif()
+
+find_package(executorch CONFIG REQUIRED PATHS ${_root_binary_dir})
+find_package(gflags REQUIRED PATHS ${_root_binary_dir}/third-party)
 
 target_include_directories(executorch INTERFACE ${_common_include_directories})
 
@@ -62,8 +69,7 @@ option(
 #
 # The `_<target>_srcs` lists are defined by including ${EXECUTORCH_SRCS_FILE}.
 #
-set(EXECUTORCH_SRCS_FILE
-    "${CMAKE_CURRENT_BINARY_DIR}/../../../executorch_srcs.cmake")
+set(EXECUTORCH_SRCS_FILE "${_root_binary_dir}/executorch_srcs.cmake")
 
 extract_sources(${EXECUTORCH_SRCS_FILE})
 

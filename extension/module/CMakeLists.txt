@@ -32,6 +32,6 @@ target_compile_options(extension_module PUBLIC -Wno-deprecated-declarations
 # Install libraries
 install(
   TARGETS extension_module
-  DESTINATION lib
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}
   INCLUDES
   DESTINATION ${_common_include_directories})

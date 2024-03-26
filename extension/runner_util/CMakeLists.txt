@@ -27,6 +27,6 @@ target_compile_options(extension_runner_util PUBLIC ${_common_compile_options})
 # Install libraries
 install(
   TARGETS extension_runner_util
-  DESTINATION ${CMAKE_BINARY_DIR}/lib
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}
   INCLUDES
   DESTINATION ${_common_include_directories})

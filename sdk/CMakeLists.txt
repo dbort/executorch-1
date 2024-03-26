@@ -175,6 +175,5 @@ target_include_directories(
 # Install libraries
 install(
   TARGETS bundled_program etdump flatccrt
-  DESTINATION ${CMAKE_BINARY_DIR}/lib
-  INCLUDES
-  DESTINATION ${_common_include_directories})
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

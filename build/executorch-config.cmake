@@ -12,12 +12,18 @@
 
 cmake_minimum_required(VERSION 3.19)
 
+# This file (which lives in CMAKE_CURRENT_LIST_DIR) should have been installed
+# in "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}". Get the path to
+# CMAKE_INSTALL_LIBDIR, which should contain all static and dynamic libraries.
 set(_root "${CMAKE_CURRENT_LIST_DIR}/../..")
+
 add_library(executorch STATIC IMPORTED)
 find_library(
     EXECUTORCH_LIBRARY_PATH executorch
-    HINTS "${_root}"
-    CMAKE_FIND_ROOT_PATH_BOTH
+    PATHS "${_root}"
+    REQUIRED
+    # Look only under PATHS; do not search under other implicit roots.
+    NO_CMAKE_FIND_ROOT_PATH
 )
 set_target_properties(
     executorch PROPERTIES IMPORTED_LOCATION "${EXECUTORCH_LIBRARY_PATH}"
@@ -27,8 +33,10 @@ target_include_directories(executorch INTERFACE ${_root})
 add_library(portable_kernels STATIC IMPORTED)
 find_library(
     PORTABLE_KERNELS_PATH portable_kernels
-    HINTS "${_root}"
-    CMAKE_FIND_ROOT_PATH_BOTH
+    PATHS "${_root}"
+    REQUIRED
+    # Look only under PATHS; do not search under other implicit roots.
+    NO_CMAKE_FIND_ROOT_PATH
 )
 set_target_properties(
     portable_kernels PROPERTIES IMPORTED_LOCATION "${PORTABLE_KERNELS_PATH}"
@@ -36,13 +44,13 @@ set_target_properties(
 target_include_directories(portable_kernels INTERFACE ${_root})
 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
-    set(FLATCC_LIB flatcc_d)
+    set(FLATCCRT_LIB flatccrt_d)
 else()
-    set(FLATCC_LIB flatcc)
+    set(FLATCCRT_LIB flatccrt)
 endif()
 
 set(lib_list
-    etdump bundled_program extension_data_loader ${FLATCC_LIB} mpsdelegate
+    etdump bundled_program extension_data_loader ${FLATCCRT_LIB} mpsdelegate
     qnn_executorch_backend portable_ops_lib extension_module xnnpack_backend
     XNNPACK cpuinfo pthreadpool vulkan_backend optimized_kernels 
     optimized_ops_lib optimized_native_cpu_ops_lib
@@ -58,7 +66,7 @@ foreach(lib ${lib_list})
         if("${lib}" STREQUAL "extension_module" AND (NOT CMAKE_TOOLCHAIN_IOS))
             add_library(${lib} SHARED IMPORTED)
         else()
-            # Building a share library on iOS requires code signing, so it's
+            # Building a shared library on iOS requires code signing, so it's
             # easier to keep all libs as static when CMAKE_TOOLCHAIN_IOS is
             # used
             add_library(${lib} STATIC IMPORTED)

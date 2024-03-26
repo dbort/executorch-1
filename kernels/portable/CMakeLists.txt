@@ -64,4 +64,5 @@ gen_operators_lib(
   KERNEL_LIBS portable_kernels
   DEPS executorch)
 
-install(TARGETS portable_kernels portable_ops_lib DESTINATION lib)
+install(TARGETS portable_kernels portable_ops_lib
+        DESTINATION ${CMAKE_INSTALL_LIBDIR})

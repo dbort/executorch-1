@@ -77,6 +77,6 @@ target_link_libraries(mpsdelegate
 
 install(
   TARGETS mpsdelegate
-  DESTINATION lib
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}
   INCLUDES
   DESTINATION ${_common_include_directories})

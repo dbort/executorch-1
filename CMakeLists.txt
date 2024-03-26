@@ -45,6 +45,12 @@ project(executorch)
 include(build/Utils.cmake)
 include(CMakeDependentOption)
 
+# Set CMAKE_INSTALL_* vars to values recommended by the GNU Coding Standards.
+# It's important we do this here because many of the third-party projects also
+# include this, and it can change the values of CMAKE_INSTALL_* vars on some
+# systems (e.g., from `lib` to `lib64`).
+include(GNUInstallDirs)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_CXX_STANDARD)
@@ -118,7 +124,8 @@ endif()
 # disables exceptions and runtime type.
 set(CMAKE_CXX_FLAGS_RELEASE
     "-ffunction-sections -fdata-sections -fno-exceptions -fno-rtti")
-if(NOT APPLE)
+if(CMAKE_COMPILER_IS_GNUCXX)
+  # `-s` is a gcc-specific flag to strip outputs.
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -s")
 endif()
 
@@ -170,6 +177,11 @@ option(EXECUTORCH_BUILD_XNNPACK "Build the XNNPACK backend" OFF)
 
 option(EXECUTORCH_BUILD_VULKAN "Build the Vulkan backend" OFF)
 
+# Conventional installation location for CMake config files; see
+# https://stackoverflow.com/q/71725037.
+set(EXECUTORCH_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+    CACHE STRING "Install path for ${PROJECT_NAME} CMake files")
+
 if(NOT BUCK2)
   set(BUCK2 buck2)
 endif()
@@ -181,7 +193,8 @@ endif()
 # TODO(dbort): Fix these warnings and remove this flag.
 set(_common_compile_options -Wno-deprecated-declarations -fPIC)
 
-# Let files say "include <executorch/path/to/header.h>".
+# Let files say "include <executorch/path/to/header.h>". Assumes that the repo
+# lives in a directory named "executorch".
 set(_common_include_directories ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 #
@@ -270,6 +283,13 @@ if(EXECUTORCH_BUILD_FLATC)
       OFF
       CACHE BOOL "")
   add_subdirectory(third-party/flatbuffers)
+
+  # Install flatc ourselves, even though third-party/flatbuffers/CMakeLists.txt
+  # has an option for it. Setting FLATBUFFERS_INSTALL would also install its
+  # CMake config files, which we do not want to publish.
+  install(
+    TARGETS flatc
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 if(NOT FLATC_EXECUTABLE)
   message(
@@ -307,6 +327,16 @@ if(MAX_KERNEL_NUM)
                              PRIVATE MAX_KERNEL_NUM=${MAX_KERNEL_NUM})
 endif()
 
+install(
+  TARGETS executorch
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+# Install CMake config along with library files.
+install(
+  FILES build/executorch-config.cmake
+  DESTINATION ${EXECUTORCH_INSTALL_CMAKEDIR})
+
 #
 # portable_ops_lib: A library to register core ATen ops using portable kernels,
 # see kernels/portable/CMakeLists.txt.
@@ -334,15 +364,6 @@ cmake_dependent_option(EXECUTORCH_BUILD_GFLAGS "Build the gflags library." ON
 if(EXECUTORCH_BUILD_GFLAGS)
   add_subdirectory(third-party/gflags)
 endif()
-
-# Install `executorch` library as well as `executorch-config.cmake` under
-# ${CMAKE_INSTALL_PREFIX}/
-install(
-  TARGETS executorch
-  DESTINATION lib
-  INCLUDES
-  DESTINATION ${_common_include_directories})
-install(FILES build/executorch-config.cmake DESTINATION lib/cmake/ExecuTorch)
 
 #
 # executor_runner: Host tool that demonstrates program execution.
@@ -463,21 +484,26 @@ if(EXECUTORCH_BUILD_PYBIND)
                PATHS "${TORCH_INSTALL_PREFIX}/lib")
 
   # compile options for pybind
-
   set(_pybind_compile_options -Wno-deprecated-declarations -fPIC -frtti
                               -fexceptions)
-  # util lib
+
+  # Utilities needed by the pybindings extension.
   add_library(
-    util
+    extension_pybindings_util
     ${CMAKE_CURRENT_SOURCE_DIR}/extension/evalue_util/print_evalue.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/extension/aten_util/aten_bridge.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/util/read_file.cpp)
-  target_include_directories(util PUBLIC ${_common_include_directories}
-                                         ${TORCH_INCLUDE_DIRS})
-  target_compile_options(util PUBLIC ${_pybind_compile_options})
-  target_link_libraries(util PRIVATE torch c10 executorch)
+  target_include_directories(
+    extension_pybindings_util
+    PUBLIC
+      ${_common_include_directories}
+      ${TORCH_INCLUDE_DIRS})
+  target_compile_options(extension_pybindings_util
+                         PUBLIC ${_pybind_compile_options})
+  target_link_libraries(extension_pybindings_util PRIVATE torch c10 executorch)
 
-  # pybind portable_lib
+  # Pybindings extension for the executorch.extension.pybindings.portable_lib
+  # module.
   pybind11_add_module(portable_lib extension/pybindings/pybindings.cpp)
   target_compile_definitions(portable_lib
                              PUBLIC EXECUTORCH_PYTHON_MODULE_NAME=portable_lib)
@@ -490,15 +516,12 @@ if(EXECUTORCH_BUILD_PYBIND)
            etdump
            executorch
            extension_data_loader
+           extension_pybindings_util
            portable_ops_lib
-           util
            torch
            ${PYBIND_LINK_COREML}
            ${PYBIND_LINK_MPS}
            ${PYBIND_LINK_XNNPACK})
-
-  install(TARGETS portable_lib
-          LIBRARY DESTINATION executorch/extension/pybindings)
 endif()
 
 # Print all summary
