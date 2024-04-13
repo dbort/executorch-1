@@ -74,7 +74,18 @@ class ShouldBuild:
         val = os.environ.get(env_var, None)
         if val is None:
             return default
-        if val in ("OFF", "0", ""):
+        # See https://cmake.org/cmake/help/latest/command/if.html#constant for
+        # CMake's list of values that are considered false.
+        if val.endswith("-NOTFOUND") or val in (
+            "0",
+            "OFF",
+            "NO",
+            "FALSE",
+            "N",
+            "IGNORE",
+            "NOTFOUND",
+            "",
+        ):
             return False
         return True
 
@@ -82,11 +93,6 @@ class ShouldBuild:
     @property
     def pybindings(cls) -> bool:
         return cls._is_env_enabled("EXECUTORCH_BUILD_PYBIND", default=False)
-
-    @classmethod
-    @property
-    def xnnpack(cls) -> bool:
-        return cls._is_env_enabled("EXECUTORCH_BUILD_XNNPACK", default=False)
 
 
 class _BaseExtension(Extension):
@@ -372,13 +378,9 @@ class CustomBuild(build):
                 "-DEXECUTORCH_BUILD_PYBIND=ON",
             ]
             build_args += ["--target", "portable_lib"]
-            if ShouldBuild.xnnpack:
-                cmake_args += [
-                    "-DEXECUTORCH_BUILD_XNNPACK=ON",
-                ]
-                # No target needed; the cmake arg will link xnnpack
-                # into the portable_lib target.
-            # TODO(dbort): Add MPS/CoreML backends when building on macos.
+            # To link backends into the portable_lib target, callers should
+            # add entries like `-DEXECUTORCH_BUILD_PYBIND=ON` to the CMAKE_ARGS
+            # environment variable.
 
         # Allow adding extra cmake args through the environment. Used by some
         # tests and demos to expand the set of targets included in the pip
