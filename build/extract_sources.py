@@ -85,6 +85,7 @@ class Target:
         base_dict: Optional[dict] = None,
     ) -> None:
         self._state: Target._InitState = Target._InitState.UNINITIALIZED
+        self._transitive_sources = frozenset()
         self._sources = frozenset()
 
         self.name = name
@@ -96,9 +97,11 @@ class Target:
             else:
                 self._config[k] = v
 
-    def get_sources(self, graph: "Graph", runner: Buck2Runner) -> frozenset[str]:
+    def get_sources(
+        self, graph: "Graph", runner: Buck2Runner, transitive: bool = False
+    ) -> frozenset[str]:
         if self._state == Target._InitState.READY:
-            return self._sources
+            return self._transitive_sources if transitive else self._sources
         # Detect cycles.
         assert self._state != Target._InitState.INITIALIZING
 
@@ -115,24 +118,29 @@ class Target:
         # Get the complete list of source files that this target depends on.
         sources: set[str] = set(runner.run(["cquery", query]))
 
-        # Keep entries that match all of the filters.
+        # Keep entries that match any of the filters.
         filters = [re.compile(p) for p in self._config.get("filters", [])]
-        sources = {s for s in sources if all(p.search(s) for p in filters)}
+        sources = {s for s in sources if any(p.search(s) for p in filters)}
 
         # Remove entries that match any of the excludes.
         excludes = [re.compile(p) for p in self._config.get("excludes", [])]
         sources = {s for s in sources if not any(p.search(s) for p in excludes)}
+
+        # Remember the full set before removing sources owned by deps.
+        self._transitive_sources = frozenset(sources)
 
         # The buck query will give us the complete list of sources that this
         # target depends on, but that list includes sources that are owned by
         # its deps. Remove entries that are already covered by the transitive
         # set of dependencies.
         for dep in self._config.get("deps", []):
-            sources.difference_update(graph.by_name[dep].get_sources(graph, runner))
+            sources.difference_update(
+                graph.by_name[dep].get_sources(graph, runner, transitive=True)
+            )
 
         self._sources = frozenset(sources)
         self._state = Target._InitState.READY
-        return self._sources
+        return self._transitive_sources if transitive else self._sources
 
 
 class Graph:
