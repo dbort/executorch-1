@@ -11,6 +11,10 @@
 [target_base]
 excludes = [
   "^third-party",
+  # Exclude the codegen templates, which are picked up because the buck targets
+  # transitively depend on the generated_lib and not on the unwrapped set of
+  # kernels.
+  "^codegen/templates",
 ]
 
 # ---------------------------------- core start ----------------------------------
@@ -48,14 +52,8 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  # Exclude the codegen templates, which are picked up because the buck target
-  # is the generated_lib and not the unwrapped set of kernels.
-  "^codegen/templates",
-]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
 ]
 
 [targets.optimized_kernels]
@@ -65,15 +63,9 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  # Exclude the codegen templates, which are picked up because the buck target
-  # is the generated_lib and not the unwrapped set of kernels.
-  "^codegen/templates",
-]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
-  "portable_kernels",
+  "portable_kernels", # For kernels/portable/cpu/util/
 ]
 
 [targets.quantized_kernels]
@@ -83,15 +75,9 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  # Exclude the codegen templates, which are picked up because the buck target
-  # is the generated_lib and not the unwrapped set of kernels.
-  "^codegen/templates",
-]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
-  "portable_kernels",
+  "portable_kernels", # For kernels/portable/cpu/util/
 ]
 
 [targets.program_schema]
@@ -109,10 +95,7 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-]
 deps = [
-  "executorch_no_prim_ops",
   "executorch",
 ]
 
@@ -129,7 +112,6 @@ filters = [
   ".cpp$",
 ]
 deps = [
-  "executorch_no_prim_ops",
   "executorch",
 ]
 
@@ -142,7 +124,6 @@ filters = [
 ]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
   "extension_data_loader",
 ]
 
@@ -155,7 +136,6 @@ filters = [
 ]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
 ]
 
 # ---------------------------------- extension end ----------------------------------
@@ -168,12 +148,8 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  "^codegen",
-]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
   "portable_kernels",
   "quantized_kernels",
 ]
@@ -185,11 +161,7 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  "^codegen",
-]
 deps = [
-  "executorch_no_prim_ops",
   "executorch",
 ]
 # ---------------------------------- binary end ----------------------------------
@@ -201,12 +173,8 @@ buck_targets = [
 filters = [
   "(.mm|.cpp)$",
 ]
-excludes = [
-  "^codegen",
-]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
   "portable_kernels",
 ]
 
@@ -219,7 +187,6 @@ filters = [
 ]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
 ]
 
 [targets.mps_schema]
@@ -240,12 +207,8 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  "^codegen",
-]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
   "xnnpack_backend",
   "portable_kernels",
 ]
@@ -259,7 +222,6 @@ filters = [
 ]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
 ]
 
 [targets.xnnpack_schema]
@@ -287,12 +249,8 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  "^codegen",
-]
 deps = [
   "executorch",
-  "executorch_no_prim_ops",
   "optimized_kernels",
   "xnnpack_backend",
 ]
@@ -304,13 +262,9 @@ buck_targets = [
 filters = [
   ".cpp$",
 ]
-excludes = [
-  "^codegen",
-]
 deps = [
   "custom_ops",
   "executorch",
-  "executorch_no_prim_ops",
   "extension_data_loader",
   "extension_module",
   "portable_kernels",
