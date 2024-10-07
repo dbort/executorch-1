@@ -19,8 +19,9 @@
 #include <new>
 #include <unordered_set>
 
-namespace torch {
-namespace executor {
+namespace executorch {
+namespace backends {
+namespace neuron {
 
 const char kHighAddrKey[] = "HighAddr";
 const char kImportForeverKey[] = "ImportForever";
@@ -175,11 +176,13 @@ int NeuronExecuTorchDelegate::HintNeuronBackend(EValue** args) const {
   return NEURON_NO_ERROR;
 }
 
-} // namespace executor
-} // namespace torch
+} // namespace neuron
+} // namespace backends
+} // namespace executorch
 
 namespace {
-auto cls = torch::executor::NeuronBackend();
-torch::executor::Backend backend{"NeuropilotBackend", &cls};
-static auto success_with_compiler = register_backend(backend);
+auto cls = executorch::backends::neuron::NeuronBackend();
+executorch::runtime::Backend backend{"NeuropilotBackend", &cls};
+static auto success_with_compiler =
+    executorch::runtime::register_backend(backend);
 } // namespace

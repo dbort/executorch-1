@@ -22,10 +22,10 @@
 #include <new>
 
 #define GET_NEURON_ALLOCATOR \
-  ::torch::executor::neuron::BufferAllocator::GetInstance()
+  ::executorch::backends::neuron::BufferAllocator::GetInstance()
 
-namespace torch {
-namespace executor {
+namespace executorch {
+namespace backends {
 namespace neuron {
 
 struct BufferDeleter {
@@ -136,5 +136,5 @@ class BufferAllocator : public MemoryAllocator {
 };
 
 } // namespace neuron
-} // namespace executor
-} // namespace torch
+} // namespace backends
+} // namespace executorch
