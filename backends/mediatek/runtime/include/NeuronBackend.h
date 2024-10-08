@@ -115,7 +115,7 @@ class NeuronExecuTorchDelegate {
 
   ::executorch::runtime::Error execute(
       ET_UNUSED ::executorch::runtime::BackendExecutionContext& context,
-      EValue** args) const;
+      ::executorch::runtime::EValue** args) const;
 
  private:
   template <bool isInput>

@@ -23,6 +23,17 @@ namespace executorch {
 namespace backends {
 namespace neuron {
 
+using executorch::runtime::ArrayRef;
+using executorch::runtime::BackendExecutionContext;
+using executorch::runtime::BackendInitContext;
+using executorch::runtime::CompileSpec;
+using executorch::runtime::DelegateHandle;
+using executorch::runtime::Error;
+using executorch::runtime::EValue;
+using executorch::runtime::FreeableBuffer;
+using executorch::runtime::MemoryAllocator;
+using executorch::runtime::Result;
+
 const char kHighAddrKey[] = "HighAddr";
 const char kImportForeverKey[] = "ImportForever";
 

@@ -102,7 +102,7 @@ class MemoryUnit {
   size_t mSize = 0;
 };
 
-class BufferAllocator : public MemoryAllocator {
+class BufferAllocator : public executorch::runtime::MemoryAllocator {
  public:
   static BufferAllocator& GetInstance();
 
@@ -119,7 +119,7 @@ class BufferAllocator : public MemoryAllocator {
   void Clear();
 
  private:
-  BufferAllocator() : MemoryAllocator(0, nullptr) {}
+  BufferAllocator() : executorch::runtime::MemoryAllocator(0, nullptr) {}
 
   BufferAllocator(const BufferAllocator&) = delete;
 
