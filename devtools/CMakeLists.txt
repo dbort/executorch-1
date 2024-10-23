@@ -66,6 +66,10 @@ set(FLATCC_DEBUG_CLANG_SANITIZE
     OFF
     CACHE BOOL ""
 )
+set(FLATCC_BUILD_INTO_SOURCE_DIR
+    OFF
+    CACHE BOOL ""
+)
 set(_flatcc_source_dir ${CMAKE_CURRENT_SOURCE_DIR}/../third-party/flatcc)
 add_subdirectory(${_flatcc_source_dir} ${CMAKE_BINARY_DIR}/third-party/flatcc)
 
@@ -94,34 +98,20 @@ if(EXECUTORCH_SEPARATE_FLATCC_HOST_PROJECT)
   execute_process(
     COMMAND
       ${CMAKE_COMMAND} ${_flatcc_source_dir} -DFLATCC_TEST=OFF
-      -DFLATCC_REFLECTION=OFF
+      -DFLATCC_REFLECTION=OFF -DFLATCC_BUILD_INTO_SOURCE_DIR=OFF
       # See above comment about POSITION_INDEPENDENT_CODE.
       -DCMAKE_POSITION_INDEPENDENT_CODE=ON -B${CMAKE_BINARY_DIR}/_host_build
   )
   execute_process(
     COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/_host_build
   )
+  set(_etdump_host_flatcc_cli ${CMAKE_BINARY_DIR}/_host_build/bin/flatcc)
   set(_etdump_schema_gen_dep)
-  # TODO(dbort): flatcc installs its files directly in its source directory
-  # instead of under CMAKE_BINARY_DIR, and it has no options to avoid doing
-  # this. We build flatcc twice in the executorch build: once to get the
-  # `flatcc` host commandline tool, and once to get the (potentially
-  # cross-compiled) target runtime library. The host build will put its outputs
-  # in the source tree, making the cross-compiling target build think that the
-  # outputs have already been built. It will then try to link against the
-  # host-architecture libraries, failing when cross-compiling. To work around
-  # this, delete the host outputs after running this command (which only runs
-  # when setting up the cmake files, not when actually building). This leaves
-  # room for the target build to put its own files in the source tree. We should
-  # try to remove this hack, ideally by submitting an upstream PR that adds an
-  # option to change the installation location.
-  set(_etdump_schema_cleanup_paths ${_flatcc_source_dir}/bin/*
-                                   ${_flatcc_source_dir}/lib/*
-  )
 else()
   # If we're not cross-compiling, we can just use the plain commandline target.
+  # CMake will replace the target name with the path to the executable.
+  set(_etdump_host_flatcc_cli flatcc_cli)
   set(_etdump_schema_gen_dep flatcc_cli)
-  set(_etdump_schema_cleanup_paths "")
 endif()
 
 set(_etdump_schema__outputs)
@@ -163,10 +153,9 @@ add_custom_command(
     # Note that the flatcc project actually writes its outputs into the source
     # tree instead of under the binary directory, and there's no way to change
     # that behavior.
-    ${_flatcc_source_dir}/bin/flatcc -cwr -o
+    ${_etdump_host_flatcc_cli} -cwr -o
     ${_program_schema__include_dir}/executorch/devtools/etdump
     ${_etdump_schema__srcs}
-  COMMAND rm -f ${_etdump_schema_cleanup_paths}
   DEPENDS ${_etdump_schema_gen_dep}
   COMMENT "Generating etdump headers"
 )
@@ -174,6 +163,7 @@ add_custom_command(
 add_library(
   etdump ${CMAKE_CURRENT_SOURCE_DIR}/etdump/etdump_flatcc.cpp
          ${CMAKE_CURRENT_SOURCE_DIR}/etdump/emitter.cpp
+         ${_etdump_schema__outputs}
 )
 
 target_link_libraries(
